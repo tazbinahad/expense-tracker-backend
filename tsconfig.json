@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    /* 1. Language & Environment */
+    "target": "ES2022" /* Generates modern JS code (Node 16+ compatible) */,
+    "lib": [
+      "ESNext"
+    ] /* Includes latest JS features. Removed "DOM" since this is backend */,
+    "module": "NodeNext" /* Best for modern Node.js (allows top-level await) */,
+    "moduleResolution": "NodeNext" /* Aligns with 'module' setting */,
+
+    /* 2. Output & Directory Structure */
+    "rootDir": "./src" /* Where your .ts files live */,
+    "outDir": "./dist" /* Where .js files will be built */,
+    "sourceMap": true /* Helps debugging by mapping JS back to TS */,
+    "removeComments": true /* Removes comments from the built JS files to save space */,
+
+    /* 3. Interop & Compatibility */
+    "esModuleInterop": true /* Fixes imports for CommonJS modules (like Express/Mongoose) */,
+    "forceConsistentCasingInFileNames": true /* Prevents bugs between Windows/Mac filenames */,
+    "skipLibCheck": true /* Skips type checking of node_modules (speeds up build) */,
+    "resolveJsonModule": true /* Allows importing .json files */,
+
+    /* 4. Strict Type-Checking (The "Pro" Settings) */
+    "strict": true /* Enables all strict type checking options */,
+    "noImplicitAny": true /* Errors if a type is not defined */,
+    "strictNullChecks": true /* Prevents "cannot read property of undefined" errors */,
+    "noUncheckedIndexedAccess": true /* Safer array access (e.g. items[0] could be undefined) */,
+    "exactOptionalPropertyTypes": true /* Strict handling of optional properties */
+  },
+  "ts-node": {
+    "files": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"] /* Ignore these folders */
+}

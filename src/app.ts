@@ -17,7 +17,8 @@ import IncomeRoute from "./routes/income.route";
 import TransferRoute from "./routes/transfer.route";
 import ExpenseRoute from "./routes/expense.route";
 import { protect } from "./middlewares/auth.middleware";
-
+import dns from "node:dns";
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 // 1. Initialize App
 const app: Application = express();
 
@@ -57,7 +58,7 @@ const server = app.listen(PORT, () => {
 server.on("error", (err: any) => {
   if (err.code === "EADDRINUSE") {
     console.error(
-      `❌ Port ${PORT} is already in use. Please use a different port or kill the process using it.`
+      `❌ Port ${PORT} is already in use. Please use a different port or kill the process using it.`,
     );
     process.exit(1);
   } else {

@@ -19,7 +19,7 @@ const envVars = envSchema.safeParse(process.env);
 if (!envVars.success) {
   console.error(
     "❌ Invalid environment variables:",
-    z.treeifyError(envVars.error)
+    z.treeifyError(envVars.error),
   );
   process.exit(1);
 }

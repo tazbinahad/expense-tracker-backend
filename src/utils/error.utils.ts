@@ -57,3 +57,9 @@ export class ConflictError extends ApiError {
     super(409, message);
   }
 }
+
+export class ServiceUnavailableError extends ApiError {
+  constructor(message = "Service temporarily unavailable") {
+    super(503, message);
+  }
+}

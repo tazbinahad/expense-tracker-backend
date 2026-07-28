@@ -2,15 +2,19 @@ import { z } from "zod";
 
 export const createCategorySchema = z.object({
   body: z.object({
-    memberId: z.string().min(3, "Member ID must be at least 3 characters long"),
     categoryName: z
       .string()
+      .trim()
       .min(3, "Category name must be at least 3 characters long"),
     type: z.enum(["income", "expense"]),
+    icon: z.string().trim().min(2).max(40).optional(),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   }),
 });
 
-export type ICreateCategoryInput = z.infer<typeof createCategorySchema>["body"];
+export type ICreateCategoryInput = z.infer<typeof createCategorySchema>["body"] & {
+  memberId: string;
+};
 
 export const updateCategorySchema = z.object({
   params: z.object({
@@ -19,9 +23,12 @@ export const updateCategorySchema = z.object({
   body: z.object({
     categoryName: z
       .string()
+      .trim()
       .min(3, "Category name must be at least 3 characters long")
       .optional(),
     type: z.enum(["income", "expense"]).optional(),
+    icon: z.string().trim().min(2).max(40).optional(),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   }),
 });
 

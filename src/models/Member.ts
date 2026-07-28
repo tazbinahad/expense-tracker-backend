@@ -14,8 +14,8 @@ export interface IMember extends Document {
 const memberSchema = new Schema<IMember>(
   {
     mid: { type: String, required: true, unique: true },
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, trim: true, lowercase: true },
     password: { type: String, required: true },
     memberType: {
       type: String,

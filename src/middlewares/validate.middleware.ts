@@ -10,12 +10,14 @@ export const validate =
   (schema: ZodType) =>
   async (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
     try {
-      await schema.parseAsync({
+      const parsed = (await schema.parseAsync({
         body: req.body,
         query: req.query,
         params: req.params,
-      });
+      })) as { body: unknown; params: Record<string, string> };
 
+      req.body = parsed.body;
+      req.params = parsed.params;
       next();
     } catch (error) {
       if (error instanceof ZodError) {

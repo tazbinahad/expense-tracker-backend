@@ -2,7 +2,6 @@ import { ILoginInput, IRegisterInput } from "../schemas/auth.schema";
 import {
   memberLoginService,
   registerMemberService,
-  getMembersService,
 } from "../services/auth.service";
 import { asyncHandler } from "../utils/core.utils";
 import { sendResponse } from "../utils/response.utils";
@@ -19,7 +18,6 @@ export const memberLoginController = asyncHandler(async (req, res) => {
   sendResponse(res, 200, JWTToken, "Member logged in successfully");
 });
 
-export const getMembersController = asyncHandler(async (req, res) => {
-  const members = await getMembersService();
-  sendResponse(res, 200, members, "Members retrieved successfully");
+export const getCurrentMemberController = asyncHandler(async (req, res) => {
+  sendResponse(res, 200, req.user, "Member retrieved successfully");
 });

@@ -15,31 +15,34 @@ import { asyncHandler } from "../utils/core.utils";
 import { sendResponse } from "../utils/response.utils";
 
 export const createAccountController = asyncHandler(async (req, res) => {
-  const account = await createAccountService(req.body);
+  const account = await createAccountService({
+    ...req.body,
+    memberId: req.user!._id.toString(),
+  });
   sendResponse(res, 201, account, "Account created successfully");
 });
 
 export const updateAccountController = asyncHandler(async (req, res) => {
   const { id } = req.params as IUpdateAccountInput["params"];
 
-  const account = await updateAccountService(id, req.body);
+  const account = await updateAccountService(id, req.user!._id.toString(), req.body);
   sendResponse(res, 200, account, "Account updated successfully");
 });
 
 export const deleteAccountController = asyncHandler(async (req, res) => {
   const { id } = req.params as IDeleteAccountInput["params"];
 
-  await deleteAccountService(id);
+  await deleteAccountService(id, req.user!._id.toString());
   sendResponse(res, 200, null, "Account deleted successfully");
 });
 
 export const getAllAccountsController = asyncHandler(async (req, res) => {
-  const accounts = await getAllAccountsService();
+  const accounts = await getAllAccountsService(req.user!._id.toString());
   sendResponse(res, 200, accounts, "Accounts fetched successfully");
 });
 
 export const getAccountController = asyncHandler(async (req, res) => {
   const { id } = req.params as IGetAccountInput["params"];
-  const account = await getAccountService(id);
+  const account = await getAccountService(id, req.user!._id.toString());
   sendResponse(res, 200, account, "Account fetched successfully");
 });

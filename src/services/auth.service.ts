@@ -4,9 +4,9 @@ import { ILoginInput, IRegisterInput } from "../schemas/auth.schema";
 import { generateJWTToken } from "../utils/core.utils";
 import {
   ConflictError,
-  NotFoundError,
   UnauthorizedError,
 } from "../utils/error.utils";
+import { ensureMemberDefaults } from "./bootstrap.service";
 
 export const registerMemberService = async (data: IRegisterInput) => {
   try {
@@ -35,6 +35,7 @@ export const registerMemberService = async (data: IRegisterInput) => {
       email,
       password: encriptedPassword,
     });
+    await ensureMemberDefaults(member._id.toString());
     return member.mid;
   } catch (error) {
     throw error;
@@ -47,7 +48,7 @@ export const memberLoginService = async (data: ILoginInput) => {
   const user = await Member.findOne({ email: username });
 
   if (!user) {
-    throw new NotFoundError("User not found");
+    throw new UnauthorizedError("Invalid credentials");
   }
   const isPasswordMatched = await bcrypt.compare(password, user.password);
 
@@ -55,19 +56,9 @@ export const memberLoginService = async (data: ILoginInput) => {
     throw new UnauthorizedError("Invalid credentials");
   }
 
+  await ensureMemberDefaults(user._id.toString());
   const JWTToken = generateJWTToken(user);
 
   return JWTToken;
 };
 
-export const getMembersService = async () => {
-  try {
-    const members = await Member.find().select("-password");
-    if (!members.length) {
-      throw new NotFoundError("Members not found");
-    }
-    return members;
-  } catch (error) {
-    throw error;
-  }
-};

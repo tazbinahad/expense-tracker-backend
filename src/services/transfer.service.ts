@@ -8,6 +8,7 @@ import {
   IUpdateTransferInput,
 } from "../schemas/transfer.schema";
 import { BadRequestError, NotFoundError } from "../utils/error.utils";
+import { roundMoney } from "../utils/money.utils";
 
 export const createTransferService = async (data: ICreateTransferInput) => {
   const session = await mongoose.startSession();
@@ -27,12 +28,18 @@ export const createTransferService = async (data: ICreateTransferInput) => {
       throw new BadRequestError("Cannot transfer to the same account");
     }
 
-    const fromAccount = await Account.findById(fromAccountId).session(session);
+    const fromAccount = await Account.findOne({
+      _id: fromAccountId,
+      memberId,
+    }).session(session);
     if (!fromAccount) {
       throw new NotFoundError("From Account not found");
     }
 
-    const toAccount = await Account.findById(toAccountId).session(session);
+    const toAccount = await Account.findOne({
+      _id: toAccountId,
+      memberId,
+    }).session(session);
     if (!toAccount) {
       throw new NotFoundError("To Account not found");
     }
@@ -42,11 +49,11 @@ export const createTransferService = async (data: ICreateTransferInput) => {
     }
 
     // Deduct from source
-    fromAccount.balance -= amount + transferFee;
+    fromAccount.balance = roundMoney(fromAccount.balance - amount - transferFee);
     await fromAccount.save({ session });
 
     // Add to destination
-    toAccount.balance += amount;
+    toAccount.balance = roundMoney(toAccount.balance + amount);
     await toAccount.save({ session });
 
     // Create transfer record
@@ -74,12 +81,13 @@ export const createTransferService = async (data: ICreateTransferInput) => {
 
 export const updateTransferService = async (
   id: IUpdateTransferInput["params"]["id"],
+  memberId: string,
   data: IUpdateTransferInput["body"]
 ) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const transfer = await Transfer.findById(id).session(session);
+    const transfer = await Transfer.findOne({ _id: id, memberId }).session(session);
     if (!transfer) {
       throw new NotFoundError("Transfer not found");
     }
@@ -92,14 +100,21 @@ export const updateTransferService = async (
       session
     );
 
-    if (oldFromAccount) {
-      oldFromAccount.balance += transfer.amount + transfer.transferFee;
-      await oldFromAccount.save({ session });
+    if (!oldFromAccount || !oldToAccount) {
+      throw new NotFoundError("Transfer account not found");
     }
-    if (oldToAccount) {
-      oldToAccount.balance -= transfer.amount;
-      await oldToAccount.save({ session });
+    if (oldToAccount.balance < transfer.amount) {
+      throw new BadRequestError(
+        "Transfer cannot be changed because its funds have already been spent",
+      );
     }
+
+    oldFromAccount.balance = roundMoney(
+      oldFromAccount.balance + transfer.amount + transfer.transferFee,
+    );
+    await oldFromAccount.save({ session });
+    oldToAccount.balance = roundMoney(oldToAccount.balance - transfer.amount);
+    await oldToAccount.save({ session });
 
     // Prepare new data
     const newFromAccountId =
@@ -115,14 +130,14 @@ export const updateTransferService = async (
     }
 
     // Apply new transfer
-    const newFromAccount = await Account.findById(newFromAccountId).session(
+    const newFromAccount = await Account.findOne({ _id: newFromAccountId, memberId }).session(
       session
     );
     if (!newFromAccount) {
       throw new NotFoundError("New From Account not found");
     }
 
-    const newToAccount = await Account.findById(newToAccountId).session(
+    const newToAccount = await Account.findOne({ _id: newToAccountId, memberId }).session(
       session
     );
     if (!newToAccount) {
@@ -133,14 +148,16 @@ export const updateTransferService = async (
       throw new BadRequestError("Insufficient balance in new source account");
     }
 
-    newFromAccount.balance -= newAmount + newTransferFee;
+    newFromAccount.balance = roundMoney(
+      newFromAccount.balance - newAmount - newTransferFee,
+    );
     await newFromAccount.save({ session });
 
-    newToAccount.balance += newAmount;
+    newToAccount.balance = roundMoney(newToAccount.balance + newAmount);
     await newToAccount.save({ session });
 
     // Update transfer record
-    const updatedTransfer = await Transfer.findByIdAndUpdate(id, data, {
+    const updatedTransfer = await Transfer.findOneAndUpdate({ _id: id, memberId }, data, {
       new: true,
       session,
     });
@@ -156,12 +173,13 @@ export const updateTransferService = async (
 };
 
 export const deleteTransferService = async (
-  id: IDeleteTransferInput["params"]["id"]
+  id: IDeleteTransferInput["params"]["id"],
+  memberId: string,
 ) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const transfer = await Transfer.findById(id).session(session);
+    const transfer = await Transfer.findOne({ _id: id, memberId }).session(session);
     if (!transfer) {
       throw new NotFoundError("Transfer not found");
     }
@@ -174,15 +192,20 @@ export const deleteTransferService = async (
       session
     );
 
-    if (fromAccount) {
-      fromAccount.balance += transfer.amount + transfer.transferFee;
-      await fromAccount.save({ session });
+    if (!fromAccount || !toAccount) {
+      throw new NotFoundError("Transfer account not found");
     }
-
-    if (toAccount) {
-      toAccount.balance -= transfer.amount;
-      await toAccount.save({ session });
+    if (toAccount.balance < transfer.amount) {
+      throw new BadRequestError(
+        "Transfer cannot be deleted because its funds have already been spent",
+      );
     }
+    fromAccount.balance = roundMoney(
+      fromAccount.balance + transfer.amount + transfer.transferFee,
+    );
+    await fromAccount.save({ session });
+    toAccount.balance = roundMoney(toAccount.balance - transfer.amount);
+    await toAccount.save({ session });
 
     await Transfer.findByIdAndDelete(id).session(session);
 
@@ -196,11 +219,12 @@ export const deleteTransferService = async (
   }
 };
 
-export const getAllTransfersService = async () => {
+export const getAllTransfersService = async (memberId: string) => {
   try {
-    const transfers = await Transfer.find()
+    const transfers = await Transfer.find({ memberId })
       .populate("fromAccountId", "accountName")
-      .populate("toAccountId", "accountName");
+      .populate("toAccountId", "accountName")
+      .sort({ date: -1 });
     return transfers;
   } catch (error) {
     throw error;
@@ -208,10 +232,11 @@ export const getAllTransfersService = async () => {
 };
 
 export const getTransferService = async (
-  id: IGetTransferInput["params"]["id"]
+  id: IGetTransferInput["params"]["id"],
+  memberId: string,
 ) => {
   try {
-    const transfer = await Transfer.findById(id)
+    const transfer = await Transfer.findOne({ _id: id, memberId })
       .populate("fromAccountId", "accountName")
       .populate("toAccountId", "accountName");
     if (!transfer) {

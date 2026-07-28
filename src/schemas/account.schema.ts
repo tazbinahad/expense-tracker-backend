@@ -2,20 +2,22 @@ import { z } from "zod";
 
 export const createAccountSchema = z.object({
   body: z.object({
-    memberId: z.string().min(3, "Member ID must be at least 3 characters long"),
     accountName: z
       .string()
+      .trim()
       .min(3, "Account name must be at least 3 characters long"),
-    accountNumber: z
+    accountNumber: z.coerce
       .string()
-      .min(3, "Account number must be at least 3 characters long"),
+      .regex(/^\d{3,}$/, "Account number must contain at least 3 digits"),
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]),
     openingBalance: z.number().min(0, "Balance must be at least 0"),
     currency: z.enum(["BDT"]),
   }),
 });
 
-export type ICreateAccountInput = z.infer<typeof createAccountSchema>["body"];
+export type ICreateAccountInput = z.infer<typeof createAccountSchema>["body"] & {
+  memberId: string;
+};
 
 export const updateAccountSchema = z.object({
   params: z.object({
@@ -24,10 +26,10 @@ export const updateAccountSchema = z.object({
   body: z.object({
     accountName: z
       .string()
+      .trim()
       .min(3, "Account name must be at least 3 characters long")
       .optional(),
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]).optional(),
-    openingBalance: z.number().optional(),
     currency: z.enum(["BDT"]).optional(),
   }),
 });

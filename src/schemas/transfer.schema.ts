@@ -2,14 +2,13 @@ import { z } from "zod";
 
 export const createTransferSchema = z.object({
   body: z.object({
-    memberId: z.string().min(3, "Member ID must be at least 3 characters long"),
     fromAccountId: z
       .string()
       .min(3, "From Account ID must be at least 3 characters long"),
     toAccountId: z
       .string()
       .min(3, "To Account ID must be at least 3 characters long"),
-    amount: z.number().min(0, "Amount must be at least 0"),
+    amount: z.number().positive("Amount must be greater than 0"),
     transferFee: z
       .number()
       .min(0, "Transfer fee must be at least 0")
@@ -19,7 +18,9 @@ export const createTransferSchema = z.object({
   }),
 });
 
-export type ICreateTransferInput = z.infer<typeof createTransferSchema>["body"];
+export type ICreateTransferInput = z.infer<typeof createTransferSchema>["body"] & {
+  memberId: string;
+};
 
 export const updateTransferSchema = z.object({
   params: z.object({
@@ -34,7 +35,7 @@ export const updateTransferSchema = z.object({
       .string()
       .min(3, "To Account ID must be at least 3 characters long")
       .optional(),
-    amount: z.number().min(0, "Amount must be at least 0").optional(),
+    amount: z.number().positive("Amount must be greater than 0").optional(),
     transferFee: z
       .number()
       .min(0, "Transfer fee must be at least 0")

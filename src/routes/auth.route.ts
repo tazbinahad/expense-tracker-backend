@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  getMembersController,
+  getCurrentMemberController,
   memberLoginController,
   registerMemberController,
 } from "../controllers/auth.controller";
@@ -17,6 +17,6 @@ AuthRoutes.post(
 );
 
 AuthRoutes.post("/login", validate(loginSchema), memberLoginController);
-AuthRoutes.get("/members", protect, getMembersController);
+AuthRoutes.get("/me", protect, getCurrentMemberController);
 
 export default AuthRoutes;

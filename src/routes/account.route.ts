@@ -19,19 +19,19 @@ const AccountRoute = Router();
 AccountRoute.post(
   "/createAccount",
   validate(createAccountSchema),
-  createAccountController
+  createAccountController,
 );
 
 AccountRoute.put(
   "/updateAccount/:id",
   validate(updateAccountSchema),
-  updateAccountController
+  updateAccountController,
 );
 
 AccountRoute.delete(
   "/deleteAccount/:id",
   validate(deleteAccountSchema),
-  deleteAccountController
+  deleteAccountController,
 );
 
 AccountRoute.get("/getAllAccounts", getAllAccountsController);
@@ -39,7 +39,7 @@ AccountRoute.get("/getAllAccounts", getAllAccountsController);
 AccountRoute.get(
   "/getAccount/:id",
   validate(getAccountSchema),
-  getAccountController
+  getAccountController,
 );
 
 export default AccountRoute;

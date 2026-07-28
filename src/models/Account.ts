@@ -15,7 +15,7 @@ export interface IAccount extends Document {
 const accountSchema = new Schema<IAccount>(
   {
     memberId: { type: Schema.Types.ObjectId, ref: "Member", required: true },
-    accountName: { type: String, required: true },
+    accountName: { type: String, required: true, trim: true },
     accountNumber: { type: String, required: true },
     accountType: {
       type: String,
@@ -27,8 +27,10 @@ const accountSchema = new Schema<IAccount>(
   },
   {
     versionKey: false,
-  }
+  },
 );
+
+accountSchema.index({ memberId: 1, accountNumber: 1 }, { unique: true });
 
 // Apply the timestamp plugin
 accountSchema.plugin(timestampPlugin);

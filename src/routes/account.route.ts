@@ -4,6 +4,7 @@ import {
   deleteAccountController,
   getAccountController,
   getAllAccountsController,
+  payCreditCardController,
   updateAccountController,
 } from "../controllers/account.controller";
 import { validate } from "../middlewares/validate.middleware";
@@ -11,6 +12,7 @@ import {
   createAccountSchema,
   deleteAccountSchema,
   getAccountSchema,
+  payCreditCardSchema,
   updateAccountSchema,
 } from "../schemas/account.schema";
 
@@ -40,6 +42,12 @@ AccountRoute.get(
   "/getAccount/:id",
   validate(getAccountSchema),
   getAccountController,
+);
+
+AccountRoute.post(
+  "/payCreditCard/:id",
+  validate(payCreditCardSchema),
+  payCreditCardController,
 );
 
 export default AccountRoute;

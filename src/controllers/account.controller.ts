@@ -2,6 +2,7 @@ import {
   ICreateAccountInput,
   IDeleteAccountInput,
   IGetAccountInput,
+  IPayCreditCardInput,
   IUpdateAccountInput,
 } from "../schemas/account.schema";
 import {
@@ -9,6 +10,7 @@ import {
   deleteAccountService,
   getAccountService,
   getAllAccountsService,
+  payCreditCardService,
   updateAccountService,
 } from "../services/account.service";
 import { asyncHandler } from "../utils/core.utils";
@@ -45,4 +47,14 @@ export const getAccountController = asyncHandler(async (req, res) => {
   const { id } = req.params as IGetAccountInput["params"];
   const account = await getAccountService(id, req.user!._id.toString());
   sendResponse(res, 200, account, "Account fetched successfully");
+});
+
+export const payCreditCardController = asyncHandler(async (req, res) => {
+  const { id } = req.params as IPayCreditCardInput["params"];
+  const result = await payCreditCardService(
+    id,
+    req.user!._id.toString(),
+    req.body,
+  );
+  sendResponse(res, 201, result, "Credit card payment recorded successfully");
 });

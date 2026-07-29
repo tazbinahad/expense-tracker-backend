@@ -12,6 +12,10 @@ export const createAccountSchema = z.object({
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]),
     openingBalance: z.number().min(0, "Balance must be at least 0"),
     currency: z.enum(["BDT"]),
+    creditLimit: z.number().positive().optional(),
+    statementDay: z.number().int().min(1).max(28).optional(),
+    paymentDueDay: z.number().int().min(1).max(28).optional(),
+    statementBalance: z.number().min(0).optional(),
   }),
 });
 
@@ -31,6 +35,10 @@ export const updateAccountSchema = z.object({
       .optional(),
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]).optional(),
     currency: z.enum(["BDT"]).optional(),
+    creditLimit: z.number().positive().optional(),
+    statementDay: z.number().int().min(1).max(28).optional(),
+    paymentDueDay: z.number().int().min(1).max(28).optional(),
+    statementBalance: z.number().min(0).optional(),
   }),
 });
 
@@ -51,3 +59,17 @@ export const getAccountSchema = z.object({
 });
 
 export type IGetAccountInput = z.infer<typeof getAccountSchema>;
+
+export const payCreditCardSchema = z.object({
+  params: z.object({
+    id: z.string().min(3, "Card account ID must be at least 3 characters long"),
+  }),
+  body: z.object({
+    fromAccountId: z.string().min(3),
+    amount: z.number().positive(),
+    date: z.coerce.date().optional(),
+    notes: z.string().trim().max(200).optional(),
+  }),
+});
+
+export type IPayCreditCardInput = z.infer<typeof payCreditCardSchema>;

@@ -8,6 +8,12 @@ export interface IAccount extends Document {
   accountType: string;
   balance: number;
   currency: string;
+  creditLimit?: number;
+  statementDay?: number;
+  paymentDueDay?: number;
+  statementBalance?: number;
+  nextStatementDate?: Date;
+  nextPaymentDueDate?: Date;
   createdAt: Date;
   updatedAt: Date | null;
 }
@@ -24,6 +30,12 @@ const accountSchema = new Schema<IAccount>(
     },
     balance: { type: Number, default: 0, required: true },
     currency: { type: String, default: "BDT", required: true },
+    creditLimit: { type: Number, min: 0 },
+    statementDay: { type: Number, min: 1, max: 28 },
+    paymentDueDay: { type: Number, min: 1, max: 28 },
+    statementBalance: { type: Number, min: 0, default: 0 },
+    nextStatementDate: { type: Date },
+    nextPaymentDueDate: { type: Date },
   },
   {
     versionKey: false,

@@ -7,6 +7,7 @@ export const createLiabilitySchema = z.object({
     name: z.string().trim().min(2).max(100),
     type: z.enum(["loan", "credit_card_emi"]),
     lender: z.string().trim().min(2).max(100),
+    cardAccountId: z.string().min(3).optional(),
     originalAmount: z.number().positive(),
     annualInterestRate: z.number().min(0).max(100).default(0),
     installmentAmount: z.number().positive(),
@@ -14,6 +15,14 @@ export const createLiabilitySchema = z.object({
     startDate: z.coerce.date(),
     nextDueDate: z.coerce.date(),
     notes: z.string().trim().max(500).optional(),
+  }).superRefine((body, context) => {
+    if (body.type === "credit_card_emi" && !body.cardAccountId) {
+      context.addIssue({
+        code: "custom",
+        path: ["cardAccountId"],
+        message: "A credit card is required for credit card EMI",
+      });
+    }
   }),
 });
 

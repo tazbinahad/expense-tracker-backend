@@ -43,6 +43,11 @@ export const createTransferService = async (data: ICreateTransferInput) => {
     if (!toAccount) {
       throw new NotFoundError("To Account not found");
     }
+    if (fromAccount.accountType === "Card" || toAccount.accountType === "Card") {
+      throw new BadRequestError(
+        "Use the credit card payment workflow for card accounts",
+      );
+    }
 
     if (fromAccount.balance < amount + transferFee) {
       throw new BadRequestError("Insufficient balance in source account");
@@ -90,6 +95,9 @@ export const updateTransferService = async (
     const transfer = await Transfer.findOne({ _id: id, memberId }).session(session);
     if (!transfer) {
       throw new NotFoundError("Transfer not found");
+    }
+    if (transfer.transferType === "card_payment") {
+      throw new BadRequestError("Credit card payments cannot be edited");
     }
 
     // Revert old transfer
@@ -182,6 +190,9 @@ export const deleteTransferService = async (
     const transfer = await Transfer.findOne({ _id: id, memberId }).session(session);
     if (!transfer) {
       throw new NotFoundError("Transfer not found");
+    }
+    if (transfer.transferType === "card_payment") {
+      throw new BadRequestError("Credit card payments cannot be deleted");
     }
 
     // Revert balances

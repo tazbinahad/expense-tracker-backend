@@ -14,6 +14,25 @@ import { resolveCatalogItems } from "./item.service";
 
 const toCents = (value: number) => Math.round(value * 100);
 
+const assertExpenseCapacity = (
+  account: { accountType: string; balance: number; creditLimit?: number },
+  amount: number,
+) => {
+  if (account.accountType !== "Card") {
+    if (account.balance < amount) {
+      throw new BadRequestError("Insufficient balance");
+    }
+    return;
+  }
+  const projectedOutstanding = Math.max(0, -(account.balance - amount));
+  if (
+    account.creditLimit !== undefined &&
+    projectedOutstanding > account.creditLimit
+  ) {
+    throw new BadRequestError("Credit limit exceeded");
+  }
+};
+
 const validateItemTotal = (
   items: { price: number; quantity: number }[],
   adjustments: { type: "charge" | "discount"; amount: number }[],
@@ -77,10 +96,7 @@ export const createExpenseService = async (data: ICreateExpenseInput) => {
       throw new NotFoundError("Category not found");
     }
 
-    // Check Balance
-    if (account.balance < totalAmount) {
-      throw new BadRequestError("Insufficient balance");
-    }
+    assertExpenseCapacity(account, totalAmount);
 
     // Deduct Balance
     account.balance = roundMoney(account.balance - totalAmount);
@@ -171,9 +187,7 @@ export const updateExpenseService = async (
       throw new NotFoundError("New Account not found");
     }
 
-    if (newAccount.balance < newTotalAmount) {
-      throw new BadRequestError("Insufficient balance in account");
-    }
+    assertExpenseCapacity(newAccount, newTotalAmount);
 
     // Deduct new balance
     newAccount.balance = roundMoney(newAccount.balance - newTotalAmount);

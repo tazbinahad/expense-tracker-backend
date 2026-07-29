@@ -7,6 +7,8 @@ export interface ITransfer extends Document {
   amount: number;
   transferFee: number;
   description: string;
+  transferType: "transfer" | "card_payment";
+  liabilityId?: mongoose.Types.ObjectId;
   date: Date;
 }
 
@@ -26,6 +28,12 @@ const transferSchema = new Schema(
     amount: { type: Number, required: true },
     transferFee: { type: Number, default: 0 },
     description: { type: String },
+    transferType: {
+      type: String,
+      enum: ["transfer", "card_payment"],
+      default: "transfer",
+    },
+    liabilityId: { type: Schema.Types.ObjectId, ref: "Liability" },
     date: { type: Date, default: Date.now },
   },
   {

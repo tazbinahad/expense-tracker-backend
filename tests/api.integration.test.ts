@@ -894,6 +894,130 @@ describe.sequential("expense tracker API", () => {
       .expect(200);
   });
 
+  it("tracks credit card purchases, limits, statements, and payments", async () => {
+    const funding = await request(app)
+      .post("/api/account/createAccount")
+      .set(auth())
+      .send({
+        accountName: "Card Payment Bank",
+        accountNumber: 246810,
+        accountType: "Bank",
+        openingBalance: 1000,
+        currency: "BDT",
+      })
+      .expect(201);
+
+    const created = await request(app)
+      .post("/api/account/createAccount")
+      .set(auth())
+      .send({
+        accountName: "Everyday Credit Card",
+        accountNumber: 987654,
+        accountType: "Card",
+        openingBalance: 1000,
+        currency: "BDT",
+        creditLimit: 5000,
+        statementDay: 10,
+        paymentDueDay: 25,
+        statementBalance: 1000,
+      })
+      .expect(201);
+
+    const cardAccountId = created.body.data._id;
+    expect(created.body.data).toMatchObject({
+      balance: -1000,
+      creditLimit: 5000,
+      statementDay: 10,
+      paymentDueDay: 25,
+      statementBalance: 1000,
+    });
+
+    await request(app)
+      .post("/api/expense/createExpense")
+      .set(auth())
+      .send({
+        categoryId: expenseCategoryId,
+        accountId: cardAccountId,
+        title: "Card groceries",
+        totalAmount: 500,
+        items: [{ name: "Card groceries", price: 500, quantity: 1 }],
+      })
+      .expect(201);
+
+    await request(app)
+      .post("/api/expense/createExpense")
+      .set(auth())
+      .send({
+        categoryId: expenseCategoryId,
+        accountId: cardAccountId,
+        title: "Over limit purchase",
+        totalAmount: 4000,
+        items: [{ name: "Over limit purchase", price: 4000, quantity: 1 }],
+      })
+      .expect(400);
+
+    const emi = await request(app)
+      .post("/api/liability/createLiability")
+      .set(auth())
+      .send({
+        name: "Phone EMI",
+        type: "credit_card_emi",
+        lender: "Everyday Credit Card",
+        cardAccountId,
+        originalAmount: 300,
+        annualInterestRate: 0,
+        installmentAmount: 100,
+        totalInstallments: 3,
+        startDate: "2026-07-01",
+        nextDueDate: "2026-08-01",
+      })
+      .expect(201);
+
+    const installment = await request(app)
+      .post(`/api/liability/recordPayment/${emi.body.data._id}`)
+      .set(auth())
+      .send({
+        accountId: cardAccountId,
+        amount: 100,
+        date: "2026-08-01",
+      })
+      .expect(201);
+    expect(installment.body.data.liability).toMatchObject({
+      cardAccountId,
+      remainingAmount: 200,
+      paidInstallments: 1,
+    });
+
+    const payment = await request(app)
+      .post(`/api/account/payCreditCard/${cardAccountId}`)
+      .set(auth())
+      .send({
+        fromAccountId: funding.body.data._id,
+        amount: 100,
+        notes: "Monthly card payment",
+      })
+      .expect(201);
+
+    expect(payment.body.data.card).toMatchObject({
+      balance: -1500,
+      statementBalance: 1000,
+    });
+    expect(payment.body.data.payment).toMatchObject({
+      transferType: "card_payment",
+      amount: 100,
+    });
+
+    await request(app)
+      .post("/api/transfer/createTransfer")
+      .set(auth())
+      .send({
+        fromAccountId: funding.body.data._id,
+        toAccountId: cardAccountId,
+        amount: 10,
+      })
+      .expect(400);
+  });
+
   it("prevents cross-user resource access", async () => {
     await request(app)
       .post("/api/auth/register")

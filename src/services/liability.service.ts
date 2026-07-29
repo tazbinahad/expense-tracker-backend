@@ -28,14 +28,27 @@ const addMonthClamped = (date: Date) => {
   return result;
 };
 
-export const createLiabilityService = (
+export const createLiabilityService = async (
   memberId: string,
   data: CreateLiabilityInput,
-) =>
-  Liability.create({
+) => {
+  if (data.type === "credit_card_emi") {
+    const cardAccountId = data.cardAccountId;
+    if (!cardAccountId) {
+      throw new BadRequestError("A credit card is required for credit card EMI");
+    }
+    const card = await Account.findOne({
+      _id: cardAccountId,
+      memberId,
+      accountType: "Card",
+    });
+    if (!card) throw new NotFoundError("Credit card account not found");
+  }
+  return Liability.create({
     name: data.name,
     type: data.type,
     lender: data.lender,
+    ...(data.cardAccountId ? { cardAccountId: data.cardAccountId } : {}),
     memberId: new mongoose.Types.ObjectId(memberId),
     originalAmount: roundMoney(data.originalAmount),
     remainingAmount: roundMoney(data.originalAmount),
@@ -46,6 +59,7 @@ export const createLiabilityService = (
     nextDueDate: data.nextDueDate,
     ...(data.notes ? { notes: data.notes } : {}),
   });
+};
 
 export const getAllLiabilitiesService = (memberId: string) =>
   Liability.find({ memberId }).sort({ status: 1, nextDueDate: 1 });
@@ -115,9 +129,32 @@ export const recordLiabilityPaymentService = async (
       throw new BadRequestError("Payment cannot exceed the remaining balance");
     }
 
-    const account = await Account.findOne({ _id: data.accountId, memberId }).session(session);
+    const paymentAccountId =
+      liability.type === "credit_card_emi"
+        ? liability.cardAccountId?.toString()
+        : data.accountId;
+    if (!paymentAccountId) {
+      throw new BadRequestError("Credit card EMI is not linked to a card");
+    }
+    const account = await Account.findOne({
+      _id: paymentAccountId,
+      memberId,
+    }).session(session);
     if (!account) throw new NotFoundError("Account not found");
-    if (account.balance < data.amount) throw new BadRequestError("Insufficient balance");
+    if (liability.type === "credit_card_emi") {
+      if (account.accountType !== "Card") {
+        throw new BadRequestError("Credit card EMI must be charged to a card");
+      }
+      const projectedOutstanding = Math.max(0, -(account.balance - data.amount));
+      if (
+        account.creditLimit !== undefined &&
+        projectedOutstanding > account.creditLimit
+      ) {
+        throw new BadRequestError("Credit limit exceeded");
+      }
+    } else if (account.balance < data.amount) {
+      throw new BadRequestError("Insufficient balance");
+    }
 
     const categoryName =
       liability.type === "loan" ? "Loan EMI" : "Credit card EMI";
@@ -129,6 +166,11 @@ export const recordLiabilityPaymentService = async (
     if (!category) throw new NotFoundError(`${categoryName} category not found`);
 
     account.balance = roundMoney(account.balance - data.amount);
+    if (liability.type === "credit_card_emi") {
+      account.statementBalance = roundMoney(
+        (account.statementBalance || 0) + data.amount,
+      );
+    }
     await account.save({ session });
 
     const paymentItems = await resolveCatalogItems(

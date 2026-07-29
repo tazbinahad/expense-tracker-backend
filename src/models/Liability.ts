@@ -7,6 +7,7 @@ export interface ILiability extends Document {
   type: "loan" | "credit_card_emi";
   lender: string;
   cardAccountId?: mongoose.Types.ObjectId;
+  paymentAccountId?: mongoose.Types.ObjectId;
   originalAmount: number;
   remainingAmount: number;
   annualInterestRate: number;
@@ -28,6 +29,7 @@ const liabilitySchema = new Schema(
     type: { type: String, enum: ["loan", "credit_card_emi"], required: true },
     lender: { type: String, required: true, trim: true },
     cardAccountId: { type: Schema.Types.ObjectId, ref: "Account" },
+    paymentAccountId: { type: Schema.Types.ObjectId, ref: "Account" },
     originalAmount: { type: Number, required: true, min: 0.01 },
     remainingAmount: { type: Number, required: true, min: 0 },
     annualInterestRate: { type: Number, default: 0, min: 0 },

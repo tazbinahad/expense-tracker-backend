@@ -14,8 +14,13 @@ import { resolveCatalogItems } from "./item.service";
 
 const toCents = (value: number) => Math.round(value * 100);
 
-const assertExpenseCapacity = (
-  account: { accountType: string; balance: number; creditLimit?: number },
+export const assertExpenseCapacity = (
+  account: {
+    accountType: string;
+    balance: number;
+    creditLimit?: number;
+    reservedCreditAmount?: number;
+  },
   amount: number,
 ) => {
   if (account.accountType !== "Card") {
@@ -27,7 +32,8 @@ const assertExpenseCapacity = (
   const projectedOutstanding = Math.max(0, -(account.balance - amount));
   if (
     account.creditLimit !== undefined &&
-    projectedOutstanding > account.creditLimit
+    projectedOutstanding + (account.reservedCreditAmount || 0) >
+      account.creditLimit
   ) {
     throw new BadRequestError("Credit limit exceeded");
   }
@@ -145,6 +151,9 @@ export const updateExpenseService = async (
     if (expense.billId) {
       throw new BadRequestError("Bill payments must be managed from Bills & Rent");
     }
+    if (expense.vehicleLogId) {
+      throw new BadRequestError("Vehicle expenses must be managed from Vehicle Log");
+    }
 
     // Revert old balance
     const oldAccount = await Account.findOne({
@@ -230,6 +239,9 @@ export const deleteExpenseService = async (
     }
     if (expense.billId) {
       throw new BadRequestError("Bill payments cannot be deleted from transactions");
+    }
+    if (expense.vehicleLogId) {
+      throw new BadRequestError("Vehicle expenses cannot be deleted from transactions");
     }
 
     // Refund Balance

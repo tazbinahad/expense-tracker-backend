@@ -18,6 +18,7 @@ import {
   NotFoundError,
 } from "../utils/error.utils";
 import { roundMoney } from "../utils/money.utils";
+import { ensureMemberDefaults } from "./bootstrap.service";
 
 const nextDateForDay = (day: number, after = new Date()) => {
   const date = new Date(Date.UTC(after.getUTCFullYear(), after.getUTCMonth(), day));
@@ -39,8 +40,12 @@ const cardSchedule = (statementDay: number, paymentDueDay: number) => {
 
 export const createAccountService = async (data: ICreateAccountInput) => {
   try {
+    const accountNumber =
+      data.accountType === "Cash"
+        ? data.accountNumber || `cash-${new mongoose.Types.ObjectId()}`
+        : data.accountNumber!;
     const existingAccount = await Account.findOne({
-      accountNumber: data.accountNumber,
+      accountNumber,
       memberId: data.memberId,
     }).collation({ locale: "en", strength: 2 });
     if (existingAccount) {
@@ -48,12 +53,15 @@ export const createAccountService = async (data: ICreateAccountInput) => {
     }
 
     const isCard = data.accountType === "Card";
+    const reservedCreditAmount = isCard
+      ? roundMoney(data.reservedCreditAmount ?? 0)
+      : 0;
     if (
       isCard &&
       data.creditLimit !== undefined &&
-      data.openingBalance > data.creditLimit
+      data.openingBalance + reservedCreditAmount > data.creditLimit
     ) {
-      throw new BadRequestError("Outstanding cannot exceed credit limit");
+      throw new BadRequestError("Current and reserved credit cannot exceed credit limit");
     }
     if (
       isCard &&
@@ -67,7 +75,7 @@ export const createAccountService = async (data: ICreateAccountInput) => {
     const account = await Account.create({
       memberId: data.memberId,
       accountName: data.accountName,
-      accountNumber: data.accountNumber,
+      accountNumber,
       accountType: data.accountType,
       balance: isCard ? -roundMoney(data.openingBalance) : data.openingBalance,
       currency: data.currency,
@@ -75,6 +83,8 @@ export const createAccountService = async (data: ICreateAccountInput) => {
         ...(data.creditLimit !== undefined && {
           creditLimit: data.creditLimit,
         }),
+        cardNetwork: data.cardNetwork || "visa",
+        reservedCreditAmount,
         statementDay,
         paymentDueDay,
         statementBalance: roundMoney(
@@ -108,11 +118,13 @@ export const updateAccountService = async (
     const statementDay = data.statementDay ?? existing.statementDay ?? 1;
     const paymentDueDay = data.paymentDueDay ?? existing.paymentDueDay ?? 15;
     const outstanding = Math.max(0, -existing.balance);
+    const reservedCreditAmount =
+      data.reservedCreditAmount ?? existing.reservedCreditAmount ?? 0;
     if (
       data.creditLimit !== undefined &&
-      data.creditLimit < outstanding
+      data.creditLimit < outstanding + reservedCreditAmount
     ) {
-      throw new BadRequestError("Credit limit cannot be below outstanding");
+      throw new BadRequestError("Credit limit cannot be below used credit");
     }
     if (
       data.statementBalance !== undefined &&
@@ -129,6 +141,12 @@ export const updateAccountService = async (
       ...(data.accountType && { accountType: data.accountType }),
       ...(data.currency && { currency: data.currency }),
       ...(data.creditLimit !== undefined && { creditLimit: data.creditLimit }),
+      ...(data.cardNetwork !== undefined && {
+        cardNetwork: data.cardNetwork,
+      }),
+      ...(data.reservedCreditAmount !== undefined && {
+        reservedCreditAmount: roundMoney(data.reservedCreditAmount),
+      }),
       ...(data.statementDay !== undefined && { statementDay: data.statementDay }),
       ...(data.paymentDueDay !== undefined && {
         paymentDueDay: data.paymentDueDay,
@@ -230,7 +248,10 @@ export const deleteAccountService = async (
         $or: [{ fromAccountId: id }, { toAccountId: id }],
       }).then(Boolean),
       Bill.exists({ memberId, accountId: id }).then(Boolean),
-      Liability.exists({ memberId, cardAccountId: id }).then(Boolean),
+      Liability.exists({
+        memberId,
+        $or: [{ cardAccountId: id }, { paymentAccountId: id }],
+      }).then(Boolean),
     ]);
 
     if (references.some(Boolean)) {
@@ -248,6 +269,7 @@ export const deleteAccountService = async (
 
 export const getAllAccountsService = async (memberId: string) => {
   try {
+    await ensureMemberDefaults(memberId);
     const accounts = await Account.find({ memberId }).sort({ createdAt: -1 });
     return accounts;
   } catch (error) {

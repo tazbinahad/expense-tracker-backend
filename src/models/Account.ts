@@ -9,6 +9,8 @@ export interface IAccount extends Document {
   balance: number;
   currency: string;
   creditLimit?: number;
+  cardNetwork?: "visa" | "mastercard" | "amex";
+  reservedCreditAmount?: number;
   statementDay?: number;
   paymentDueDay?: number;
   statementBalance?: number;
@@ -31,6 +33,11 @@ const accountSchema = new Schema<IAccount>(
     balance: { type: Number, default: 0, required: true },
     currency: { type: String, default: "BDT", required: true },
     creditLimit: { type: Number, min: 0 },
+    cardNetwork: {
+      type: String,
+      enum: ["visa", "mastercard", "amex"],
+    },
+    reservedCreditAmount: { type: Number, min: 0, default: 0 },
     statementDay: { type: Number, min: 1, max: 28 },
     paymentDueDay: { type: Number, min: 1, max: 28 },
     statementBalance: { type: Number, min: 0, default: 0 },

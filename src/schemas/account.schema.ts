@@ -6,16 +6,27 @@ export const createAccountSchema = z.object({
       .string()
       .trim()
       .min(3, "Account name must be at least 3 characters long"),
-    accountNumber: z.coerce
-      .string()
-      .regex(/^\d{3,}$/, "Account number must contain at least 3 digits"),
+    accountNumber: z.coerce.string().trim().optional(),
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]),
     openingBalance: z.number().min(0, "Balance must be at least 0"),
     currency: z.enum(["BDT"]),
     creditLimit: z.number().positive().optional(),
+    cardNetwork: z.enum(["visa", "mastercard", "amex"]).optional(),
+    reservedCreditAmount: z.number().min(0).optional(),
     statementDay: z.number().int().min(1).max(28).optional(),
     paymentDueDay: z.number().int().min(1).max(28).optional(),
     statementBalance: z.number().min(0).optional(),
+  }).superRefine((account, context) => {
+    if (
+      account.accountType !== "Cash" &&
+      !/^\d{3,}$/.test(account.accountNumber || "")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["accountNumber"],
+        message: "Account number must contain at least 3 digits",
+      });
+    }
   }),
 });
 
@@ -36,6 +47,8 @@ export const updateAccountSchema = z.object({
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]).optional(),
     currency: z.enum(["BDT"]).optional(),
     creditLimit: z.number().positive().optional(),
+    cardNetwork: z.enum(["visa", "mastercard", "amex"]).optional(),
+    reservedCreditAmount: z.number().min(0).optional(),
     statementDay: z.number().int().min(1).max(28).optional(),
     paymentDueDay: z.number().int().min(1).max(28).optional(),
     statementBalance: z.number().min(0).optional(),

@@ -110,7 +110,7 @@ describe.sequential("expense tracker API", () => {
       balance: 0,
       currency: "BDT",
     });
-    expect(categories.body.data).toHaveLength(32);
+    expect(categories.body.data).toHaveLength(33);
     expect(categories.body.data.find(
       (category: { categoryName: string }) => category.categoryName === "Loan EMI",
     )).toMatchObject({
@@ -647,10 +647,13 @@ describe.sequential("expense tracker API", () => {
         name: "Home loan",
         type: "loan",
         lender: "Example Bank",
+        paymentAccountId: bankAccountId,
         originalAmount: 1200,
+        remainingAmount: 900,
         annualInterestRate: 9.5,
         installmentAmount: 200,
         totalInstallments: 6,
+        paidInstallments: 2,
         startDate: "2025-01-01",
         nextDueDate: "2025-01-20",
         notes: "Test loan",
@@ -658,8 +661,9 @@ describe.sequential("expense tracker API", () => {
       .expect(201);
     const liabilityId = created.body.data._id as string;
     expect(created.body.data).toMatchObject({
-      remainingAmount: 1200,
-      paidInstallments: 0,
+      paymentAccountId: bankAccountId,
+      remainingAmount: 900,
+      paidInstallments: 2,
       status: "active",
     });
 
@@ -686,8 +690,8 @@ describe.sequential("expense tracker API", () => {
       })
       .expect(201);
     expect(payment.body.data.liability).toMatchObject({
-      remainingAmount: 1000,
-      paidInstallments: 1,
+      remainingAmount: 700,
+      paidInstallments: 3,
     });
 
     const payments = await request(app)
@@ -927,6 +931,8 @@ describe.sequential("expense tracker API", () => {
     expect(created.body.data).toMatchObject({
       balance: -1000,
       creditLimit: 5000,
+      cardNetwork: "visa",
+      reservedCreditAmount: 0,
       statementDay: 10,
       paymentDueDay: 25,
       statementBalance: 1000,
@@ -965,27 +971,35 @@ describe.sequential("expense tracker API", () => {
         lender: "Everyday Credit Card",
         cardAccountId,
         originalAmount: 300,
+        remainingAmount: 90,
         annualInterestRate: 0,
         installmentAmount: 100,
         totalInstallments: 3,
+        paidInstallments: 2,
         startDate: "2026-07-01",
         nextDueDate: "2026-08-01",
       })
       .expect(201);
+    expect(emi.body.data).toMatchObject({
+      remainingAmount: 90,
+      paidInstallments: 2,
+      status: "active",
+    });
 
     const installment = await request(app)
       .post(`/api/liability/recordPayment/${emi.body.data._id}`)
       .set(auth())
       .send({
         accountId: cardAccountId,
-        amount: 100,
+        amount: 90,
         date: "2026-08-01",
       })
       .expect(201);
     expect(installment.body.data.liability).toMatchObject({
       cardAccountId,
-      remainingAmount: 200,
-      paidInstallments: 1,
+      remainingAmount: 0,
+      paidInstallments: 3,
+      status: "paid",
     });
 
     const payment = await request(app)
@@ -999,8 +1013,8 @@ describe.sequential("expense tracker API", () => {
       .expect(201);
 
     expect(payment.body.data.card).toMatchObject({
-      balance: -1500,
-      statementBalance: 1000,
+      balance: -1490,
+      statementBalance: 990,
     });
     expect(payment.body.data.payment).toMatchObject({
       transferType: "card_payment",
@@ -1016,6 +1030,102 @@ describe.sequential("expense tracker API", () => {
         amount: 10,
       })
       .expect(400);
+  });
+
+  it("tracks vehicle fuel mileage and linked service expenses", async () => {
+    const funding = await request(app)
+      .post("/api/account/createAccount")
+      .set(auth())
+      .send({
+        accountName: "Vehicle Cash",
+        accountNumber: 777777,
+        accountType: "Cash",
+        openingBalance: 5000,
+        currency: "BDT",
+      })
+      .expect(201);
+
+    const vehicle = await request(app)
+      .post("/api/vehicle/createVehicle")
+      .set(auth())
+      .send({
+        name: "Gixxer Monotone",
+        make: "Suzuki",
+        modelName: "Gixxer Monotone",
+      })
+      .expect(201);
+
+    const firstFill = await request(app)
+      .post(`/api/vehicle/${vehicle.body.data._id}/logs`)
+      .set(auth())
+      .send({
+        type: "fuel",
+        accountId: funding.body.data._id,
+        date: "2026-07-01",
+        odometerKm: 1000,
+        totalCost: 1000,
+        fuelLiters: 10,
+        fullTank: true,
+      })
+      .expect(201);
+    expect(firstFill.body.data.mileageKmPerLiter).toBeUndefined();
+
+    const secondFill = await request(app)
+      .post(`/api/vehicle/${vehicle.body.data._id}/logs`)
+      .set(auth())
+      .send({
+        type: "fuel",
+        accountId: funding.body.data._id,
+        date: "2026-07-15",
+        odometerKm: 1300,
+        totalCost: 800,
+        fuelLiters: 8,
+        fullTank: true,
+      })
+      .expect(201);
+    expect(secondFill.body.data).toMatchObject({
+      distanceKm: 300,
+      mileageKmPerLiter: 37.5,
+      pricePerLiter: 100,
+    });
+
+    const service = await request(app)
+      .post(`/api/vehicle/${vehicle.body.data._id}/logs`)
+      .set(auth())
+      .send({
+        type: "service",
+        accountId: funding.body.data._id,
+        date: "2026-07-20",
+        odometerKm: 1350,
+        totalCost: 500,
+        serviceName: "Engine oil change",
+        nextServiceOdometerKm: 2350,
+      })
+      .expect(201);
+    expect(service.body.data).toMatchObject({
+      serviceName: "Engine oil change",
+      nextServiceOdometerKm: 2350,
+    });
+
+    const logs = await request(app)
+      .get(`/api/vehicle/${vehicle.body.data._id}/logs`)
+      .set(auth())
+      .expect(200);
+    expect(logs.body.data).toHaveLength(3);
+    expect(logs.body.data[0].categoryId.categoryName).toBe(
+      "Vehicle maintenance",
+    );
+
+    await request(app)
+      .delete(`/api/vehicle/logs/${secondFill.body.data._id}`)
+      .set(auth())
+      .expect(200);
+
+    const account = await request(app)
+      .get(`/api/account/getAccount/${funding.body.data._id}`)
+      .set(auth())
+      .expect(200);
+    expect(account.body.data.balance).toBe(3500);
   });
 
   it("prevents cross-user resource access", async () => {

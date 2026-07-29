@@ -23,6 +23,7 @@ export interface IExpense extends Document {
   accountId: mongoose.Types.ObjectId;
   liabilityId?: mongoose.Types.ObjectId;
   billId?: mongoose.Types.ObjectId;
+  vehicleLogId?: mongoose.Types.ObjectId;
   title: string;
   totalAmount: number;
   subtotal: number;
@@ -44,6 +45,7 @@ const expenseSchema = new Schema(
     accountId: { type: Schema.Types.ObjectId, ref: "Account", required: true },
     liabilityId: { type: Schema.Types.ObjectId, ref: "Liability" },
     billId: { type: Schema.Types.ObjectId, ref: "Bill" },
+    vehicleLogId: { type: Schema.Types.ObjectId, ref: "VehicleLog" },
     title: { type: String, required: true },
     totalAmount: { type: Number, required: true },
     subtotal: { type: Number, required: true, default: 0 },
@@ -81,5 +83,6 @@ const expenseSchema = new Schema(
 expenseSchema.plugin(timestampPlugin);
 expenseSchema.index({ memberId: 1, liabilityId: 1, date: -1 });
 expenseSchema.index({ memberId: 1, billId: 1, date: -1 });
+expenseSchema.index({ memberId: 1, vehicleLogId: 1, date: -1 });
 
 export const Expense = mongoose.model<IExpense>("Expense", expenseSchema);

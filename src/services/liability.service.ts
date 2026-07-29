@@ -44,20 +44,42 @@ export const createLiabilityService = async (
     });
     if (!card) throw new NotFoundError("Credit card account not found");
   }
+  if (data.paymentAccountId) {
+    const paymentAccount = await Account.findOne({
+      _id: data.paymentAccountId,
+      memberId,
+      accountType: { $ne: "Card" },
+    });
+    if (!paymentAccount) throw new NotFoundError("Payment account not found");
+  }
+  const paidInstallments = data.paidInstallments ?? 0;
+  const paidAmount = roundMoney(
+    Math.min(data.originalAmount, paidInstallments * data.installmentAmount),
+  );
+  const remainingAmount =
+    data.remainingAmount === undefined
+      ? roundMoney(data.originalAmount - paidAmount)
+      : roundMoney(data.remainingAmount);
+
   return Liability.create({
     name: data.name,
     type: data.type,
     lender: data.lender,
     ...(data.cardAccountId ? { cardAccountId: data.cardAccountId } : {}),
+    ...(data.paymentAccountId
+      ? { paymentAccountId: data.paymentAccountId }
+      : {}),
     memberId: new mongoose.Types.ObjectId(memberId),
     originalAmount: roundMoney(data.originalAmount),
-    remainingAmount: roundMoney(data.originalAmount),
+    remainingAmount,
     annualInterestRate: data.annualInterestRate,
     installmentAmount: roundMoney(data.installmentAmount),
     totalInstallments: data.totalInstallments,
+    paidInstallments,
     startDate: data.startDate,
     nextDueDate: data.nextDueDate,
     ...(data.notes ? { notes: data.notes } : {}),
+    ...(remainingAmount === 0 ? { status: "paid" } : {}),
   });
 };
 
@@ -85,6 +107,14 @@ export const updateLiabilityService = async (
     data.totalInstallments < liability.paidInstallments
   ) {
     throw new BadRequestError("Total installments cannot be below installments paid");
+  }
+  if (data.paymentAccountId) {
+    const paymentAccount = await Account.findOne({
+      _id: data.paymentAccountId,
+      memberId,
+      accountType: { $ne: "Card" },
+    });
+    if (!paymentAccount) throw new NotFoundError("Payment account not found");
   }
   Object.assign(liability, data);
   return liability.save();
@@ -146,9 +176,13 @@ export const recordLiabilityPaymentService = async (
         throw new BadRequestError("Credit card EMI must be charged to a card");
       }
       const projectedOutstanding = Math.max(0, -(account.balance - data.amount));
+      const projectedReservedCredit = Math.max(
+        0,
+        (account.reservedCreditAmount || 0) - data.amount,
+      );
       if (
         account.creditLimit !== undefined &&
-        projectedOutstanding > account.creditLimit
+        projectedOutstanding + projectedReservedCredit > account.creditLimit
       ) {
         throw new BadRequestError("Credit limit exceeded");
       }
@@ -167,6 +201,9 @@ export const recordLiabilityPaymentService = async (
 
     account.balance = roundMoney(account.balance - data.amount);
     if (liability.type === "credit_card_emi") {
+      account.reservedCreditAmount = roundMoney(
+        Math.max(0, (account.reservedCreditAmount || 0) - data.amount),
+      );
       account.statementBalance = roundMoney(
         (account.statementBalance || 0) + data.amount,
       );
@@ -205,17 +242,17 @@ export const recordLiabilityPaymentService = async (
     );
 
     liability.remainingAmount = roundMoney(liability.remainingAmount - data.amount);
+    const installmentsCovered = Math.floor(
+      (data.amount + 0.001) / liability.installmentAmount,
+    );
     liability.paidInstallments = Math.min(
       liability.totalInstallments,
-      Math.floor(
-        (liability.originalAmount - liability.remainingAmount + 0.001) /
-          liability.installmentAmount,
-      ),
+      liability.paidInstallments + installmentsCovered,
     );
     if (liability.remainingAmount === 0) {
       liability.status = "paid";
       liability.paidInstallments = liability.totalInstallments;
-    } else {
+    } else if (installmentsCovered > 0) {
       liability.nextDueDate = addMonthClamped(liability.nextDueDate);
     }
     await liability.save({ session });

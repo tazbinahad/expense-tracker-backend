@@ -14,6 +14,7 @@ export const defaultCategories = [
   { categoryName: "Groceries", type: "expense", slug: "groceries", icon: "ShoppingBasket", color: "#65A30D" },
   { categoryName: "Transport", type: "expense", slug: "transport", icon: "Car", color: "#0284C7" },
   { categoryName: "Fuel", type: "expense", slug: "fuel", icon: "Fuel", color: "#475569" },
+  { categoryName: "Vehicle maintenance", type: "expense", slug: "vehicle-maintenance", icon: "Wrench", color: "#0F766E" },
   { categoryName: "Housing", type: "expense", slug: "housing", icon: "House", color: "#7C3AED" },
   { categoryName: "Rent", type: "expense", slug: "rent", icon: "KeyRound", color: "#9333EA" },
   { categoryName: "Utilities", type: "expense", slug: "utilities", icon: "Bolt", color: "#CA8A04" },
@@ -37,7 +38,7 @@ export const defaultCategories = [
 ] as const;
 
 export const ensureMemberDefaults = async (memberId: string) => {
-  const accountCount = await Account.countDocuments({ memberId });
+  const cashAccount = await Account.exists({ memberId, accountType: "Cash" });
 
   const tasks: Promise<unknown>[] = [];
 
@@ -53,12 +54,16 @@ export const ensureMemberDefaults = async (memberId: string) => {
     ),
   );
 
-  if (accountCount === 0) {
+  if (!cashAccount) {
+    let accountNumber = "1000";
+    while (await Account.exists({ memberId, accountNumber })) {
+      accountNumber = String(Number(accountNumber) + 1);
+    }
     tasks.push(
       Account.create({
         memberId,
         accountName: "Cash Wallet",
-        accountNumber: "1000",
+        accountNumber,
         accountType: "Cash",
         balance: 0,
         currency: "BDT",

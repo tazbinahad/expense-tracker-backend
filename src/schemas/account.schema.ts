@@ -6,6 +6,7 @@ export const createAccountSchema = z.object({
       .string()
       .trim()
       .min(3, "Account name must be at least 3 characters long"),
+    bankName: z.string().trim().min(2).max(120).optional(),
     accountNumber: z.coerce.string().trim().optional(),
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]),
     openingBalance: z.number().min(0, "Balance must be at least 0"),
@@ -27,6 +28,13 @@ export const createAccountSchema = z.object({
         message: "Account number must contain at least 3 digits",
       });
     }
+    if (account.accountType === "Bank" && !account.bankName) {
+      context.addIssue({
+        code: "custom",
+        path: ["bankName"],
+        message: "Bank name is required for bank accounts",
+      });
+    }
   }),
 });
 
@@ -44,6 +52,7 @@ export const updateAccountSchema = z.object({
       .trim()
       .min(3, "Account name must be at least 3 characters long")
       .optional(),
+    bankName: z.string().trim().min(2).max(120).optional(),
     accountType: z.enum(["Bank", "Mobile", "Cash", "Card"]).optional(),
     currency: z.enum(["BDT"]).optional(),
     creditLimit: z.number().positive().optional(),

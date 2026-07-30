@@ -21,6 +21,7 @@ import NotificationRoute from "./routes/notification.route";
 import WebhookRoute from "./routes/webhook.route";
 import AssistantRoute from "./routes/assistant.route";
 import VehicleRoute from "./routes/vehicle.route";
+import ReceivableRoute from "./routes/receivable.route";
 import { protect } from "./middlewares/auth.middleware";
 import { errorHandler } from "./middlewares/error.middleware";
 import { NotFoundError } from "./utils/error.utils";
@@ -50,6 +51,7 @@ app.use("/api/bill", protect, BillRoute);
 app.use("/api/notifications", protect, NotificationRoute);
 app.use("/api/assistant", protect, AssistantRoute);
 app.use("/api/vehicle", protect, VehicleRoute);
+app.use("/api/receivable", protect, ReceivableRoute);
 
 app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });

@@ -137,6 +137,7 @@ describe.sequential("expense tracker API", () => {
       .send({
         memberId: "spoofed-member",
         accountName: "Main Bank",
+        bankName: "Standard Chartered Bank",
         accountNumber: 123456,
         accountType: "Bank",
         openingBalance: 500,
@@ -309,6 +310,95 @@ describe.sequential("expense tracker API", () => {
     }
   });
 
+  it("answers read-only finance questions from member-scoped data", async () => {
+    await request(app)
+      .post("/api/assistant/chat")
+      .send({ message: "What is my balance?" })
+      .expect(401);
+
+    await request(app)
+      .post("/api/assistant/chat")
+      .set(auth())
+      .send({ message: "" })
+      .expect(400);
+
+    const { Member } = await import("../src/models/Member");
+    const member = await Member.findOne({ email: "integration@example.com" });
+    const legacyExpense = await mongoose.connection.db
+      .collection("expenses")
+      .insertOne({
+        memberId: member!._id,
+        categoryId: new mongoose.Types.ObjectId(expenseCategoryId),
+        accountId: new mongoose.Types.ObjectId(bankAccountId),
+        title: "Legacy expense without arrays",
+        totalAmount: 25,
+        date: new Date("2026-07-01T06:00:00.000Z"),
+      });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: "Your available balance is BDT 500.00.",
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    try {
+      const response = await request(app)
+        .post("/api/assistant/chat")
+        .set(auth())
+        .send({
+          message: "What is my balance?",
+          history: [
+            {
+              role: "user",
+              content: "Use my current accounts.",
+            },
+          ],
+          clientDate: "2026-07-30",
+          timeZone: "Asia/Dhaka",
+        })
+        .expect(200);
+
+      expect(response.body.data).toMatchObject({
+        answer: "Your available balance is BDT 500.00.",
+        readOnly: true,
+      });
+      expect(response.body.data.dataAsOf).toEqual(expect.any(String));
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      const requestBody = JSON.parse(
+        String(fetchMock.mock.calls[0]?.[1]?.body),
+      );
+      expect(requestBody.systemInstruction.parts[0].text).toContain(
+        "FINANCE_SNAPSHOT_JSON",
+      );
+      expect(requestBody.systemInstruction.parts[0].text).toContain(
+        "Primary Bank",
+      );
+      expect(requestBody.contents.at(-1)).toEqual({
+        role: "user",
+        parts: [{ text: "What is my balance?" }],
+      });
+    } finally {
+      fetchMock.mockRestore();
+      await mongoose.connection.db
+        .collection("expenses")
+        .deleteOne({ _id: legacyExpense.insertedId });
+    }
+  });
+
   it("does not fuzzy-match materially different item names", async () => {
     const { matchCatalogItems } = await import(
       "../src/services/assistant.service"
@@ -474,6 +564,129 @@ describe.sequential("expense tracker API", () => {
       .set(auth())
       .expect(200);
     expect(deleted.body.data._id).toBe(incomeId);
+  });
+
+  it("schedules salary for Bangladesh's last working day", async () => {
+    const created = await request(app)
+      .post("/api/income/createIncome")
+      .set(auth())
+      .send({
+        categoryId: incomeCategoryId,
+        accountId: cashAccountId,
+        source: "Monthly Salary",
+        amount: 500,
+        date: "2026-07-30T06:00:00.000Z",
+        recurrence: {
+          frequency: "monthly",
+          monthlyRule: "last_working_day",
+          timezone: "Asia/Dhaka",
+        },
+      })
+      .expect(201);
+
+    expect(created.body.data).toMatchObject({
+      occurrenceKey: "2026-07",
+    });
+    expect(created.body.data.recurringIncomeId).toEqual(expect.any(String));
+
+    const { RecurringIncome } = await import("../src/models/RecurringIncome");
+    const schedule = await RecurringIncome.findById(
+      created.body.data.recurringIncomeId,
+    ).lean();
+    expect(schedule?.nextRunAt.toISOString()).toBe("2026-08-31T06:00:00.000Z");
+    expect(schedule?.active).toBe(true);
+
+    await request(app)
+      .delete(`/api/income/deleteIncome/${created.body.data._id}`)
+      .set(auth())
+      .expect(200);
+
+    const cancelledSchedule = await RecurringIncome.findById(schedule?._id).lean();
+    expect(cancelledSchedule?.active).toBe(false);
+  });
+
+  it("tracks money lent and repayments without income or expense entries", async () => {
+    const funding = await request(app)
+      .post("/api/income/createIncome")
+      .set(auth())
+      .send({
+        categoryId: incomeCategoryId,
+        accountId: cashAccountId,
+        source: "Receivable test funding",
+        amount: 1500,
+      })
+      .expect(201);
+
+    const created = await request(app)
+      .post("/api/receivable/createReceivable")
+      .set(auth())
+      .send({
+        borrower: "Test Borrower",
+        sourceAccountId: cashAccountId,
+        principalAmount: 1000,
+        lentAt: "2026-07-29T06:00:00.000Z",
+        dueAt: "2026-08-05T06:00:00.000Z",
+        remindAt: "2026-08-04T06:00:00.000Z",
+      })
+      .expect(201);
+    const receivableId = created.body.data._id as string;
+    expect(created.body.data).toMatchObject({
+      borrower: "Test Borrower",
+      principalAmount: 1000,
+      outstandingAmount: 1000,
+      status: "active",
+    });
+
+    await request(app)
+      .post(`/api/receivable/recordRepayment/${receivableId}`)
+      .set(auth())
+      .send({
+        accountId: bankAccountId,
+        amount: 1200,
+      })
+      .expect(400);
+
+    const payment = await request(app)
+      .post(`/api/receivable/recordRepayment/${receivableId}`)
+      .set(auth())
+      .send({
+        accountId: bankAccountId,
+        amount: 400,
+        date: "2026-08-01T06:00:00.000Z",
+      })
+      .expect(201);
+    expect(payment.body.data.receivable).toMatchObject({
+      outstandingAmount: 600,
+      status: "active",
+    });
+
+    const repayments = await request(app)
+      .get(`/api/receivable/getRepayments/${receivableId}`)
+      .set(auth())
+      .expect(200);
+    expect(repayments.body.data).toHaveLength(1);
+
+    await request(app)
+      .delete(`/api/receivable/deleteReceivable/${receivableId}`)
+      .set(auth())
+      .expect(409);
+
+    await request(app)
+      .delete(
+        `/api/receivable/deleteRepayment/${receivableId}/${payment.body.data.repayment._id}`,
+      )
+      .set(auth())
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/receivable/deleteReceivable/${receivableId}`)
+      .set(auth())
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/income/deleteIncome/${funding.body.data._id}`)
+      .set(auth())
+      .expect(200);
   });
 
   it("creates, reads, updates, lists, and deletes expenses", async () => {
@@ -904,6 +1117,7 @@ describe.sequential("expense tracker API", () => {
       .set(auth())
       .send({
         accountName: "Card Payment Bank",
+        bankName: "Dutch-Bangla Bank",
         accountNumber: 246810,
         accountType: "Bank",
         openingBalance: 1000,

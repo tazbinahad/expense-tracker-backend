@@ -36,3 +36,22 @@ export const assistantExpenseDraftSchema = z.object({
 });
 
 export type AssistantExpenseDraft = z.infer<typeof assistantExpenseDraftSchema>;
+
+export const assistantChatSchema = z.object({
+  body: z.object({
+    message: z.string().trim().min(1).max(2000),
+    history: z
+      .array(
+        z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string().trim().min(1).max(4000),
+        }),
+      )
+      .max(20)
+      .default([]),
+    clientDate: z.string().trim().max(30).optional(),
+    timeZone: z.string().trim().max(80).default("Asia/Dhaka"),
+  }),
+});
+
+export type AssistantChatInput = z.infer<typeof assistantChatSchema>["body"];

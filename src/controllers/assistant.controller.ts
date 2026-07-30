@@ -1,6 +1,7 @@
 import { extractExpenseDraftService } from "../services/assistant.service";
 import { asyncHandler } from "../utils/core.utils";
 import { sendResponse } from "../utils/response.utils";
+import { financeChatService } from "../services/finance-chat.service";
 
 export const extractExpenseDraftController = asyncHandler(async (req, res) => {
   const draft = await extractExpenseDraftService({
@@ -19,4 +20,12 @@ export const extractExpenseDraftController = asyncHandler(async (req, res) => {
       : {}),
   });
   sendResponse(res, 200, draft, "Expense draft extracted successfully");
+});
+
+export const financeChatController = asyncHandler(async (req, res) => {
+  const response = await financeChatService({
+    memberId: req.user!._id.toString(),
+    ...req.body,
+  });
+  sendResponse(res, 200, response, "Finance question answered successfully");
 });

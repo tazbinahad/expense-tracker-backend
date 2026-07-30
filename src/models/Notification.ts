@@ -3,7 +3,8 @@ import { timestampPlugin } from "../plugins/timestamp.plugin";
 
 export interface INotification extends Document {
   memberId: mongoose.Types.ObjectId;
-  billId: mongoose.Types.ObjectId;
+  billId?: mongoose.Types.ObjectId;
+  receivableId?: mongoose.Types.ObjectId;
   dedupeKey: string;
   title: string;
   message: string;
@@ -16,7 +17,8 @@ export interface INotification extends Document {
 const notificationSchema = new Schema(
   {
     memberId: { type: Schema.Types.ObjectId, ref: "Member", required: true },
-    billId: { type: Schema.Types.ObjectId, ref: "Bill", required: true },
+    billId: { type: Schema.Types.ObjectId, ref: "Bill" },
+    receivableId: { type: Schema.Types.ObjectId, ref: "Receivable" },
     dedupeKey: { type: String, required: true },
     title: { type: String, required: true },
     message: { type: String, required: true },

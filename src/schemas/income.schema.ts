@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+const recurrenceSchema = z.object({
+  frequency: z.literal("monthly"),
+  monthlyRule: z.literal("last_working_day"),
+  timezone: z.literal("Asia/Dhaka").default("Asia/Dhaka"),
+});
+
 export const createIncomeSchema = z.object({
   body: z.object({
     categoryId: z
@@ -11,6 +17,7 @@ export const createIncomeSchema = z.object({
     source: z.string().trim().min(3, "Source must be at least 3 characters long"),
     amount: z.number().positive("Amount must be greater than 0"),
     date: z.coerce.date().optional(),
+    recurrence: recurrenceSchema.optional(),
   }),
 });
 

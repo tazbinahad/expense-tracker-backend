@@ -4,6 +4,8 @@ import { Income } from "../models/Income";
 import { Transfer } from "../models/Transfer";
 import { Liability } from "../models/Liability";
 import { Bill } from "../models/Bill";
+import { Receivable } from "../models/Receivable";
+import { ReceivableRepayment } from "../models/ReceivableRepayment";
 import mongoose from "mongoose";
 import {
   ICreateAccountInput,
@@ -75,6 +77,7 @@ export const createAccountService = async (data: ICreateAccountInput) => {
     const account = await Account.create({
       memberId: data.memberId,
       accountName: data.accountName,
+      ...(data.bankName && { bankName: data.bankName }),
       accountNumber,
       accountType: data.accountType,
       balance: isCard ? -roundMoney(data.openingBalance) : data.openingBalance,
@@ -138,6 +141,7 @@ export const updateAccountService = async (
         : {};
     const update = {
       ...(data.accountName && { accountName: data.accountName }),
+      ...(data.bankName && { bankName: data.bankName }),
       ...(data.accountType && { accountType: data.accountType }),
       ...(data.currency && { currency: data.currency }),
       ...(data.creditLimit !== undefined && { creditLimit: data.creditLimit }),
@@ -252,6 +256,8 @@ export const deleteAccountService = async (
         memberId,
         $or: [{ cardAccountId: id }, { paymentAccountId: id }],
       }).then(Boolean),
+      Receivable.exists({ memberId, sourceAccountId: id }).then(Boolean),
+      ReceivableRepayment.exists({ memberId, accountId: id }).then(Boolean),
     ]);
 
     if (references.some(Boolean)) {

@@ -4,6 +4,7 @@ import { timestampPlugin } from "../plugins/timestamp.plugin";
 export interface IAccount extends Document {
   memberId: mongoose.Types.ObjectId;
   accountName: string;
+  bankName?: string;
   accountNumber: string;
   accountType: string;
   balance: number;
@@ -24,6 +25,7 @@ const accountSchema = new Schema<IAccount>(
   {
     memberId: { type: Schema.Types.ObjectId, ref: "Member", required: true },
     accountName: { type: String, required: true, trim: true },
+    bankName: { type: String, trim: true, maxlength: 120 },
     accountNumber: { type: String, required: true },
     accountType: {
       type: String,

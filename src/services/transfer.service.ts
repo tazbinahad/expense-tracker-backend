@@ -9,6 +9,30 @@ import {
 } from "../schemas/transfer.schema";
 import { BadRequestError, NotFoundError } from "../utils/error.utils";
 import { roundMoney } from "../utils/money.utils";
+import { assertExpenseCapacity } from "./expense.service";
+
+const assertTransferCapacity = (
+  account: {
+    accountType: string;
+    balance: number;
+    creditLimit?: number;
+    reservedCreditAmount?: number;
+  },
+  total: number,
+) => {
+  if (account.accountType === "Card") {
+    assertExpenseCapacity(account, total);
+    return;
+  }
+  if (account.balance < total) {
+    throw new BadRequestError("Insufficient balance in source account");
+  }
+};
+
+const transferTypeFor = (
+  accountType: string,
+): "transfer" | "card_cash_advance" =>
+  accountType === "Card" ? "card_cash_advance" : "transfer";
 
 export const createTransferService = async (data: ICreateTransferInput) => {
   const session = await mongoose.startSession();
@@ -43,15 +67,13 @@ export const createTransferService = async (data: ICreateTransferInput) => {
     if (!toAccount) {
       throw new NotFoundError("To Account not found");
     }
-    if (fromAccount.accountType === "Card" || toAccount.accountType === "Card") {
+    if (toAccount.accountType === "Card") {
       throw new BadRequestError(
-        "Use the credit card payment workflow for card accounts",
+        "Use the credit card payment workflow to pay a card account",
       );
     }
 
-    if (fromAccount.balance < amount + transferFee) {
-      throw new BadRequestError("Insufficient balance in source account");
-    }
+    assertTransferCapacity(fromAccount, amount + transferFee);
 
     // Deduct from source
     fromAccount.balance = roundMoney(fromAccount.balance - amount - transferFee);
@@ -68,6 +90,7 @@ export const createTransferService = async (data: ICreateTransferInput) => {
       toAccountId,
       amount,
       transferFee,
+      transferType: transferTypeFor(fromAccount.accountType),
       description: description || "",
       date: date || new Date(),
     };
@@ -151,10 +174,13 @@ export const updateTransferService = async (
     if (!newToAccount) {
       throw new NotFoundError("New To Account not found");
     }
-
-    if (newFromAccount.balance < newAmount + newTransferFee) {
-      throw new BadRequestError("Insufficient balance in new source account");
+    if (newToAccount.accountType === "Card") {
+      throw new BadRequestError(
+        "Use the credit card payment workflow to pay a card account",
+      );
     }
+
+    assertTransferCapacity(newFromAccount, newAmount + newTransferFee);
 
     newFromAccount.balance = roundMoney(
       newFromAccount.balance - newAmount - newTransferFee,
@@ -165,10 +191,14 @@ export const updateTransferService = async (
     await newToAccount.save({ session });
 
     // Update transfer record
-    const updatedTransfer = await Transfer.findOneAndUpdate({ _id: id, memberId }, data, {
-      new: true,
-      session,
-    });
+    const updatedTransfer = await Transfer.findOneAndUpdate(
+      { _id: id, memberId },
+      {
+        ...data,
+        transferType: transferTypeFor(newFromAccount.accountType),
+      },
+      { new: true, session },
+    );
 
     await session.commitTransaction();
     return updatedTransfer;

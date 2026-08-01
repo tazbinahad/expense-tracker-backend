@@ -850,6 +850,102 @@ describe.sequential("expense tracker API", () => {
       .set(auth())
       .expect(200);
     expect(deleted.body.data._id).toBe(transferId);
+
+    const card = await request(app)
+      .post("/api/account/createAccount")
+      .set(auth())
+      .send({
+        accountName: "Cash Advance Card",
+        accountNumber: 112233,
+        accountType: "Card",
+        openingBalance: 1000,
+        creditLimit: 10000,
+        currency: "BDT",
+      })
+      .expect(201);
+    const cardId = card.body.data._id;
+    const cashBefore = await request(app)
+      .get(`/api/account/getAccount/${cashAccountId}`)
+      .set(auth())
+      .expect(200);
+
+    await request(app)
+      .post("/api/transfer/createTransfer")
+      .set(auth())
+      .send({
+        fromAccountId: bankAccountId,
+        toAccountId: cardId,
+        amount: 100,
+      })
+      .expect(400);
+
+    await request(app)
+      .post("/api/transfer/createTransfer")
+      .set(auth())
+      .send({
+        fromAccountId: cardId,
+        toAccountId: cashAccountId,
+        amount: 9500,
+        transferFee: 1,
+      })
+      .expect(400);
+
+    const cashAdvance = await request(app)
+      .post("/api/transfer/createTransfer")
+      .set(auth())
+      .send({
+        fromAccountId: cardId,
+        toAccountId: cashAccountId,
+        amount: 500,
+        transferFee: 10,
+        description: "Card cash advance",
+      })
+      .expect(201);
+    expect(cashAdvance.body.data).toMatchObject({
+      amount: 500,
+      transferFee: 10,
+      transferType: "card_cash_advance",
+    });
+
+    const cardAfterAdvance = await request(app)
+      .get(`/api/account/getAccount/${cardId}`)
+      .set(auth())
+      .expect(200);
+    const cashAfterAdvance = await request(app)
+      .get(`/api/account/getAccount/${cashAccountId}`)
+      .set(auth())
+      .expect(200);
+    expect(cardAfterAdvance.body.data.balance).toBe(-1510);
+    expect(cashAfterAdvance.body.data.balance).toBe(
+      cashBefore.body.data.balance + 500,
+    );
+
+    const updatedAdvance = await request(app)
+      .put(`/api/transfer/updateTransfer/${cashAdvance.body.data._id}`)
+      .set(auth())
+      .send({ amount: 400, transferFee: 20 })
+      .expect(200);
+    expect(updatedAdvance.body.data.transferType).toBe("card_cash_advance");
+
+    await request(app)
+      .delete(`/api/transfer/deleteTransfer/${cashAdvance.body.data._id}`)
+      .set(auth())
+      .expect(200);
+    const restoredCard = await request(app)
+      .get(`/api/account/getAccount/${cardId}`)
+      .set(auth())
+      .expect(200);
+    const restoredCash = await request(app)
+      .get(`/api/account/getAccount/${cashAccountId}`)
+      .set(auth())
+      .expect(200);
+    expect(restoredCard.body.data.balance).toBe(-1000);
+    expect(restoredCash.body.data.balance).toBe(cashBefore.body.data.balance);
+
+    await request(app)
+      .delete(`/api/account/deleteAccount/${cardId}`)
+      .set(auth())
+      .expect(200);
   });
 
   it("tracks liabilities and posts EMI payments to the expense ledger", async () => {
@@ -1138,6 +1234,10 @@ describe.sequential("expense tracker API", () => {
         statementDay: 10,
         paymentDueDay: 25,
         statementBalance: 1000,
+        minimumPaymentDue: 300,
+        debtGoal: "close",
+        payoffPriority: 1,
+        monthlyPaymentTarget: 700,
       })
       .expect(201);
 
@@ -1150,7 +1250,18 @@ describe.sequential("expense tracker API", () => {
       statementDay: 10,
       paymentDueDay: 25,
       statementBalance: 1000,
+      minimumPaymentDue: 300,
+      debtGoal: "close",
+      payoffPriority: 1,
+      monthlyPaymentTarget: 700,
+      payoffStartingBalance: 1000,
     });
+
+    await request(app)
+      .put(`/api/account/updateAccount/${cardAccountId}`)
+      .set(auth())
+      .send({ minimumPaymentDue: 1200 })
+      .expect(400);
 
     await request(app)
       .post("/api/expense/createExpense")
@@ -1229,6 +1340,7 @@ describe.sequential("expense tracker API", () => {
     expect(payment.body.data.card).toMatchObject({
       balance: -1490,
       statementBalance: 990,
+      minimumPaymentDue: 200,
     });
     expect(payment.body.data.payment).toMatchObject({
       transferType: "card_payment",

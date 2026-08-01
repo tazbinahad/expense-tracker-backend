@@ -71,6 +71,13 @@ export const createAccountService = async (data: ICreateAccountInput) => {
     ) {
       throw new BadRequestError("Statement due cannot exceed outstanding");
     }
+    if (
+      isCard &&
+      (data.minimumPaymentDue ?? 0) >
+        (data.statementBalance ?? data.openingBalance)
+    ) {
+      throw new BadRequestError("Minimum due cannot exceed statement due");
+    }
     const statementDay = data.statementDay || 1;
     const paymentDueDay = data.paymentDueDay || 15;
     const schedule = isCard ? cardSchedule(statementDay, paymentDueDay) : {};
@@ -93,6 +100,13 @@ export const createAccountService = async (data: ICreateAccountInput) => {
         statementBalance: roundMoney(
           data.statementBalance ?? data.openingBalance,
         ),
+        minimumPaymentDue: roundMoney(data.minimumPaymentDue ?? 0),
+        debtGoal: data.debtGoal || "keep",
+        payoffPriority: data.payoffPriority ?? 99,
+        monthlyPaymentTarget: roundMoney(data.monthlyPaymentTarget ?? 0),
+        ...(data.debtGoal && data.debtGoal !== "keep" && {
+          payoffStartingBalance: roundMoney(data.openingBalance),
+        }),
         ...schedule,
       }),
     });
@@ -135,6 +149,14 @@ export const updateAccountService = async (
     ) {
       throw new BadRequestError("Statement due cannot exceed outstanding");
     }
+    const effectiveStatementBalance =
+      data.statementBalance ?? existing.statementBalance ?? 0;
+    if (
+      data.minimumPaymentDue !== undefined &&
+      data.minimumPaymentDue > effectiveStatementBalance
+    ) {
+      throw new BadRequestError("Minimum due cannot exceed statement due");
+    }
     const schedule =
       existing.accountType === "Card" || data.accountType === "Card"
         ? cardSchedule(statementDay, paymentDueDay)
@@ -158,6 +180,21 @@ export const updateAccountService = async (
       ...(data.statementBalance !== undefined && {
         statementBalance: roundMoney(data.statementBalance),
       }),
+      ...(data.minimumPaymentDue !== undefined && {
+        minimumPaymentDue: roundMoney(data.minimumPaymentDue),
+      }),
+      ...(data.debtGoal !== undefined && { debtGoal: data.debtGoal }),
+      ...(data.payoffPriority !== undefined && {
+        payoffPriority: data.payoffPriority,
+      }),
+      ...(data.monthlyPaymentTarget !== undefined && {
+        monthlyPaymentTarget: roundMoney(data.monthlyPaymentTarget),
+      }),
+      ...(data.debtGoal !== undefined &&
+        data.debtGoal !== "keep" &&
+        existing.payoffStartingBalance === undefined && {
+          payoffStartingBalance: roundMoney(outstanding),
+        }),
       ...schedule,
     };
     const account = await Account.findOneAndUpdate({ _id: id, memberId }, update, {
@@ -207,6 +244,9 @@ export const payCreditCardService = async (
     card.balance = roundMoney(card.balance + data.amount);
     card.statementBalance = roundMoney(
       Math.max(0, (card.statementBalance || 0) - data.amount),
+    );
+    card.minimumPaymentDue = roundMoney(
+      Math.max(0, (card.minimumPaymentDue || 0) - data.amount),
     );
     await Promise.all([source.save({ session }), card.save({ session })]);
 

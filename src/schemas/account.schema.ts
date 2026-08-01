@@ -17,6 +17,10 @@ export const createAccountSchema = z.object({
     statementDay: z.number().int().min(1).max(28).optional(),
     paymentDueDay: z.number().int().min(1).max(28).optional(),
     statementBalance: z.number().min(0).optional(),
+    minimumPaymentDue: z.number().min(0).optional(),
+    debtGoal: z.enum(["keep", "payoff", "close"]).optional(),
+    payoffPriority: z.number().int().min(1).max(99).optional(),
+    monthlyPaymentTarget: z.number().min(0).optional(),
   }).superRefine((account, context) => {
     if (
       account.accountType !== "Cash" &&
@@ -33,6 +37,18 @@ export const createAccountSchema = z.object({
         code: "custom",
         path: ["bankName"],
         message: "Bank name is required for bank accounts",
+      });
+    }
+    if (
+      account.accountType === "Card" &&
+      account.minimumPaymentDue !== undefined &&
+      account.minimumPaymentDue >
+        (account.statementBalance ?? account.openingBalance)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["minimumPaymentDue"],
+        message: "Minimum due cannot exceed statement due",
       });
     }
   }),
@@ -61,6 +77,10 @@ export const updateAccountSchema = z.object({
     statementDay: z.number().int().min(1).max(28).optional(),
     paymentDueDay: z.number().int().min(1).max(28).optional(),
     statementBalance: z.number().min(0).optional(),
+    minimumPaymentDue: z.number().min(0).optional(),
+    debtGoal: z.enum(["keep", "payoff", "close"]).optional(),
+    payoffPriority: z.number().int().min(1).max(99).optional(),
+    monthlyPaymentTarget: z.number().min(0).optional(),
   }),
 });
 

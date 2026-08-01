@@ -15,6 +15,11 @@ export interface IAccount extends Document {
   statementDay?: number;
   paymentDueDay?: number;
   statementBalance?: number;
+  minimumPaymentDue?: number;
+  debtGoal?: "keep" | "payoff" | "close";
+  payoffPriority?: number;
+  monthlyPaymentTarget?: number;
+  payoffStartingBalance?: number;
   nextStatementDate?: Date;
   nextPaymentDueDate?: Date;
   createdAt: Date;
@@ -43,6 +48,15 @@ const accountSchema = new Schema<IAccount>(
     statementDay: { type: Number, min: 1, max: 28 },
     paymentDueDay: { type: Number, min: 1, max: 28 },
     statementBalance: { type: Number, min: 0, default: 0 },
+    minimumPaymentDue: { type: Number, min: 0, default: 0 },
+    debtGoal: {
+      type: String,
+      enum: ["keep", "payoff", "close"],
+      default: "keep",
+    },
+    payoffPriority: { type: Number, min: 1, max: 99, default: 99 },
+    monthlyPaymentTarget: { type: Number, min: 0, default: 0 },
+    payoffStartingBalance: { type: Number, min: 0 },
     nextStatementDate: { type: Date },
     nextPaymentDueDate: { type: Date },
   },
